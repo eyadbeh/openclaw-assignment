@@ -11,7 +11,15 @@ export const GATEWAY_MODELS: Record<string, string> = {
 
 /** Resolves a short name or openclaw/* agent/model route to a gateway model id; unknown names return null (never silently swapped). */
 export function resolveGatewayModel(name: string | undefined): string | null {
-  if (!name) return GATEWAY_MODELS["gpt-6-astra"]!;
+  if (!name) return "openclaw/default";
   if (name.startsWith("openclaw/")) return name;
   return GATEWAY_MODELS[name] ?? null;
+}
+
+/** Console agents backed by a dedicated OpenClaw agent; anything else runs on the gateway's default agent. */
+export const OPENCLAW_AGENT_IDS: ReadonlySet<string> = new Set(["ciso"]);
+
+/** The OpenClaw agent target for a console agent id (ciso -> openclaw/ciso; anything else -> openclaw/default). */
+export function toOpenClawTarget(agentId: string | undefined): string {
+  return agentId && OPENCLAW_AGENT_IDS.has(agentId) ? `openclaw/${agentId}` : "openclaw/default";
 }

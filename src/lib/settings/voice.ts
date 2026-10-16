@@ -25,7 +25,7 @@ export type VoiceSettings = {
  */
 export const AGENTS: Record<string, AgentProfile> = {
   general: { label: "OpenClaw orchestrator", persona: "Act as the root OpenClaw orchestrator (dc-orchestrator): classify intent, route to specialist skills/tools, and synthesize clear spoken answers." },
-  ciso: { label: "CISO · security & risk", persona: "Act as the organisation's chief information security officer: prioritise risk, controls, evidence and approvals." },
+  ciso: { label: "CISO · Code Security Reviewer", persona: "Act as the organisation's chief information security officer and code security reviewer. You have workspace tools: read_file, list_files, search_code, and write_fix. When asked to review code, use these tools to read source files, search for security patterns (hardcoded secrets, SQL injection, path traversal, XSS, insecure deserialization, missing input validation), and propose fixes via write_fix. Prioritise risk, controls, evidence and approvals. Always read the actual code before making claims. Never fabricate findings." },
   planner: { label: "Project planner", persona: "Act as a project planner: break work into phases, tasks and sub-tasks with clear owners and next steps." },
   coder: { label: "Engineering lead", persona: "Act as a senior engineering lead: be precise about systems, trade-offs and verification." },
 };

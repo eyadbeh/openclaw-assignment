@@ -9,12 +9,17 @@ export type ActionProposal = {
   summary: string;
   risk?: "low" | "medium" | "high";
 };
+export type ToolRequest = {
+  tool: "read_file" | "list_files" | "search_code" | "write_fix";
+  args: Record<string, string>;
+};
 export type Screen = {
   text: string;
   choices: Choice[];
   navigation: Nav[];
   commands?: Command[];
   actionProposal?: ActionProposal | null;
+  toolRequest?: ToolRequest | null;
 };
 
 const NAV_VALUES: Nav[] = ["back", "cancel", "home"];
@@ -32,11 +37,29 @@ function parseActionProposal(raw: unknown): ActionProposal | null | undefined {
   return { id, title, tool, summary, ...(risk ? { risk } : {}) };
 }
 
+const TOOL_NAMES = new Set(["read_file", "list_files", "search_code", "write_fix"]);
+
+function parseToolRequest(raw: unknown): ToolRequest | null {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const tool = typeof r["tool"] === "string" ? r["tool"] : "";
+  if (!TOOL_NAMES.has(tool)) return null;
+  const args: Record<string, string> = {};
+  if (r["args"] && typeof r["args"] === "object") {
+    for (const [k, v] of Object.entries(r["args"] as Record<string, unknown>)) {
+      if (typeof v === "string") args[k] = v;
+    }
+  }
+  return { tool: tool as ToolRequest["tool"], args };
+}
+
 /** Validates planner output against the blueprint rules; returns null if invalid. */
 export function parseScreen(raw: string): Screen | null {
   try {
-    const data = JSON.parse(raw) as { kind?: unknown; screen?: { text?: unknown; choices?: unknown; navigation?: unknown }; action_proposal?: unknown };
+    const data = JSON.parse(raw) as { kind?: unknown; screen?: { text?: unknown; choices?: unknown; navigation?: unknown }; action_proposal?: unknown; tool_request?: unknown };
     const proposal = parseActionProposal(data.action_proposal);
+    const toolRequest = parseToolRequest(data.tool_request);
     if ((data.kind !== "screen" && data.kind !== "action_proposal") || proposal === undefined || !data.screen) return null;
     const text = typeof data.screen.text === "string" ? data.screen.text.trim() : "";
     if (!text) return null;
@@ -55,7 +78,7 @@ export function parseScreen(raw: string): Screen | null {
     const commands = (Array.isArray((data as { app_commands?: unknown }).app_commands) ? (data as { app_commands: unknown[] }).app_commands : [])
       .filter((c): c is Command => Boolean(c) && typeof c === "object" && COMMAND_NAMES.includes((c as Command).name) && typeof (c as Command).value === "string")
       .slice(0, 3);
-    return { text, choices: trimmedChoices, navigation, commands, actionProposal: proposal };
+    return { text, choices: trimmedChoices, navigation, commands, actionProposal: proposal, toolRequest };
   } catch {
     return null;
   }

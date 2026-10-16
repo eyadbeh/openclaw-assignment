@@ -1,6 +1,6 @@
 import { unlockSpeaker } from "@/lib/voice/speak";
 import { createFileRoute } from "@tanstack/react-router";
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Mic, Square, Radio, SlidersHorizontal, Paperclip, SendHorizontal, X as XIcon, RotateCcw, ThumbsUp, ListTree, Volume2, AlertTriangle, PanelsTopLeft, ScanFace } from "lucide-react";
 import { recordWav, type Recording } from "@/lib/voice/record-wav";
 import { transcribeRecording, type Turn } from "@/lib/voice/agent";
@@ -113,6 +113,8 @@ function VoiceConsole() {
   const [notice, setNotice] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const commandRef = useRef<(command: Command) => string | null>(() => null);
+  /** One stable conversation id per console session, so the OpenClaw gateway keeps one agent session per thread. */
+  const conversationId = useMemo(newId, []);
 
   const addStep = useCallback((label: string, detail?: string, tone?: RunStep["tone"]) => {
     stepsRef.current = [...stepsRef.current, { label, at: Date.now(), ...(detail ? { detail } : {}), ...(tone ? { tone } : {}) }];
@@ -174,7 +176,7 @@ function VoiceConsole() {
               if (!writing) { writing = true; addStep("Writing reply"); }
               if (opts.typing) setRun((current) => (current ? { ...current, answer: partialText(cleanRaw(text)), stage: "streaming" } : current));
             },
-          }, signal);
+          }, signal, { agent: voiceSettings.agent, conversationId });
           break;
         } catch (error) {
           if (signal.aborted) throw error;
@@ -210,7 +212,7 @@ function VoiceConsole() {
         setSpeaking(false);
       }
     },
-    [addStep, appendMessage],
+    [addStep, appendMessage, conversationId],
   );
 
   const postPhase = useCallback((index: number) => {
@@ -669,12 +671,25 @@ function VoiceConsole() {
         show={view === "run"}
         proposal={messages[messages.length - 1]?.role === "assistant" ? messages[messages.length - 1]?.screen?.actionProposal : null}
         disabled={busy || isRecording}
-        onDecideProposal={(proposal: ActionProposal, approved: boolean) => {
-          sendText(
-            approved
-              ? `Approved action [${proposal.id}] (${proposal.title} via ${proposal.tool}). Proceed and report the result.`
-              : `Denied action [${proposal.id}] (${proposal.title}). Do not execute.`,
-          );
+        onDecideProposal={async (proposal: ActionProposal, approved: boolean) => {
+          try {
+            const res = await fetch("/api/agent/approve", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ proposalId: proposal.id, approved }),
+            });
+            const data = (await res.json()) as { status?: string; message?: string; error?: string };
+            const outcome = data.error
+              ? `Action ${proposal.title} failed: ${data.error}`
+              : data.status === "denied"
+                ? `Action ${proposal.title} was denied. No changes were made.`
+                : data.status === "executed"
+                  ? `Action ${proposal.title} completed: ${data.message ?? "success"}`
+                  : `Action ${proposal.title}: ${data.message ?? "unknown outcome"}`;
+            sendText(outcome);
+          } catch {
+            sendText(`Approval request for ${proposal.title} failed due to a network error.`);
+          }
         }}
       />
       </div>

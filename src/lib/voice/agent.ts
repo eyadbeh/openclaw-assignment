@@ -64,11 +64,12 @@ export async function streamAgentAnswer(
   signal?: AbortSignal,
   context?: string,
   model?: string,
+  meta?: { agent?: string; conversationId?: string },
 ): Promise<string> {
   const response = await fetch("/api/agent", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ turns, context, model }),
+    body: JSON.stringify({ turns, context, model, agent: meta?.agent, conversationId: meta?.conversationId }),
     ...(signal ? { signal } : {}),
   });
   if (!response.ok) throw new Error(await readError(response, "The agent could not answer"));
