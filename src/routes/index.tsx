@@ -273,6 +273,28 @@ function VoiceConsole() {
     [appendMessage, isRecording, run, runAgent],
   );
 
+  /** Human decision on an action proposal — verified server-side; the outcome flows back into the conversation. */
+  const decideProposal = async (proposal: ActionProposal, approved: boolean) => {
+    try {
+      const res = await fetch("/api/agent/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ proposalId: proposal.id, approved }),
+      });
+      const data = (await res.json()) as { status?: string; message?: string; error?: string };
+      const outcome = data.error
+        ? `Action ${proposal.title} failed: ${data.error}`
+        : data.status === "denied"
+          ? `Action ${proposal.title} was denied. No changes were made.`
+          : data.status === "executed"
+            ? `Action ${proposal.title} completed: ${data.message ?? "success"}`
+            : `Action ${proposal.title}: ${data.message ?? "unknown outcome"}`;
+      sendText(outcome);
+    } catch {
+      sendText(`Approval request for ${proposal.title} failed due to a network error.`);
+    }
+  };
+
   const finishTurn = useCallback(
     async (file: File) => {
       const controller = new AbortController();
@@ -563,12 +585,24 @@ function VoiceConsole() {
                       ]} />
                     )}
                   </div>
-                ) : <PagedScreen
-                  text={message.text}
-                  screen={message.id === messages[messages.length - 1]?.id ? message.screen : undefined}
-                  disabled={busy || isRecording}
-                  onSend={sendText}
-                />}
+                ) : (
+                  <div className="space-y-1.5">
+                    <PagedScreen
+                      text={message.text}
+                      screen={message.id === messages[messages.length - 1]?.id ? message.screen : undefined}
+                      disabled={busy || isRecording}
+                      onSend={sendText}
+                    />
+                    {message.screen?.actionProposal && (
+                      <InlineKeyboard
+                        buttons={[
+                          { key: "approve", label: "✓ Approve fix", onClick: () => void decideProposal(message.screen!.actionProposal!, true), disabled: busy || isRecording },
+                          { key: "deny", label: "✕ Deny fix", tone: "danger", onClick: () => void decideProposal(message.screen!.actionProposal!, false), disabled: busy || isRecording },
+                        ]}
+                      />
+                    )}
+                  </div>
+                )}
                 {message.steps && <StepLog steps={message.steps} defaultOpen={runOptions.expandSteps} />}
               </BotBubble>
               <div className="flex flex-wrap items-center gap-1.5 pl-1">
@@ -671,26 +705,7 @@ function VoiceConsole() {
         show={view === "run"}
         proposal={messages[messages.length - 1]?.role === "assistant" ? messages[messages.length - 1]?.screen?.actionProposal : null}
         disabled={busy || isRecording}
-        onDecideProposal={async (proposal: ActionProposal, approved: boolean) => {
-          try {
-            const res = await fetch("/api/agent/approve", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ proposalId: proposal.id, approved }),
-            });
-            const data = (await res.json()) as { status?: string; message?: string; error?: string };
-            const outcome = data.error
-              ? `Action ${proposal.title} failed: ${data.error}`
-              : data.status === "denied"
-                ? `Action ${proposal.title} was denied. No changes were made.`
-                : data.status === "executed"
-                  ? `Action ${proposal.title} completed: ${data.message ?? "success"}`
-                  : `Action ${proposal.title}: ${data.message ?? "unknown outcome"}`;
-            sendText(outcome);
-          } catch {
-            sendText(`Approval request for ${proposal.title} failed due to a network error.`);
-          }
-        }}
+        onDecideProposal={decideProposal}
       />
       </div>
       <nav aria-label="Console sections" className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-3 border-t border-border bg-background/55 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl backdrop-saturate-150 lg:hidden">
