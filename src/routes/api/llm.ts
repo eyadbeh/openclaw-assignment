@@ -26,7 +26,12 @@ type ChatMsg = { role: string; content?: string | null; tool_calls?: ToolCall[];
 
 /** Workspace tools exposed to cloud models in OpenAI function format. Writes never execute directly —
  *  they create a server-side approval proposal, exactly like the OpenClaw gateway path. */
-const MAX_TOOL_ROUNDS = 5;
+const MAX_TOOL_ROUNDS = 8;
+
+/** Oversized tool output burns the free tier's tiny tokens-per-minute budget. */
+function truncateToolOutput(output: string, max = 12_000): string {
+  return output.length > max ? `${output.slice(0, max)}\n…(truncated ${output.length - max} characters)` : output;
+}
 
 /** Workspace tools exposed to cloud models in OpenAI function format. Writes never execute directly —
  *  they create a server-side approval proposal, exactly like the OpenClaw gateway path.
@@ -37,7 +42,7 @@ const TOOLS = [
     type: "function",
     function: {
       name: "json",
-      description: "Return your final answer as one JSON object per the screen contract: { kind: \"screen\", screen: { text: string (plain spoken language), choices?: [{ id, label, value }], navigation?: [] }, action_proposal?: null, app_commands?: [] }.",
+      description: "Return your final answer as one JSON object per the screen contract: { kind: \"screen\", screen: { text: string (plain spoken language), choices?: [{ id, label, value }], navigation?: [] }, action_proposal: null, app_commands: [] }. action_proposal is ALWAYS null — write proposals are created server-side by calling the write_fix function.",
       parameters: { type: "object" },
     },
   },
@@ -89,7 +94,7 @@ export const Route = createFileRoute("/api/llm")({
         const system = [
           SYSTEM_PROMPT,
           plan,
-          "TOOL USE: Call only the functions provided in this request (read_file, list_files, search_code, write_fix); never invent other tool names. After tool results, answer in plain spoken text without markdown. If you call write_fix, never claim it executed — the console asks the human for approval.",
+          "TOOL USE: Call only the functions provided in this request (read_file, list_files, search_code, write_fix); never invent other tool names. To propose any file change, always call write_fix with the real path, content and description — the server creates the approval proposal; never build an action_proposal yourself and keep action_proposal null in your final answer. After tool results, answer in plain spoken text without markdown.",
         ].filter(Boolean).join("\n\n");
         const messages = turns.map((t) => ({ role: t.role, content: t.text }));
 
@@ -120,6 +125,9 @@ export const Route = createFileRoute("/api/llm")({
 
           const loopMessages: ChatMsg[] = [{ role: "system", content: system }, ...messages];
           for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+            if (round === MAX_TOOL_ROUNDS - 1) {
+              loopMessages.push({ role: "user", content: "Final tool round: stop exploring and give your best final answer right now via the json function." });
+            }
             let rateLimitDetail: string | null = null;
             for (let attempt = 0; attempt < 3; attempt++) {
               res = await fetch(`${base}/chat/completions`, {
@@ -157,6 +165,16 @@ export const Route = createFileRoute("/api/llm")({
               try { args = JSON.parse(call.function?.arguments || "{}") as Record<string, unknown>; } catch { args = {}; }
               if (name === "json") {
                 // The model delivered its final answer through the screen-contract function.
+                // Guard: it must never fabricate an action_proposal — only the write_fix
+                // function creates server-side proposals with real stored arguments.
+                const fabricated = (args as { action_proposal?: { tool?: unknown } }).action_proposal;
+                if (fabricated && typeof fabricated.tool === "string" && isKnownTool(fabricated.tool)) {
+                  loopMessages.push(
+                    { role: "assistant", content: msg.content ?? null, tool_calls: calls },
+                    { role: "tool", tool_call_id: call.id ?? "", content: "Rejected: never fabricate an action_proposal yourself. Call the write_fix function with the real path, content and description — the server then creates the approval proposal. After that, give your final answer with action_proposal set to null." },
+                  );
+                  continue;
+                }
                 return json({ text: JSON.stringify(args) });
               }
               if (!isKnownTool(name)) {
@@ -180,7 +198,7 @@ export const Route = createFileRoute("/api/llm")({
                 });
                 return json({ text: enriched });
               }
-              loopMessages.push({ role: "tool", tool_call_id: call.id ?? "", content: result.ok ? result.output : `Error: ${result.output}` });
+              loopMessages.push({ role: "tool", tool_call_id: call.id ?? "", content: result.ok ? truncateToolOutput(result.output) : `Error: ${truncateToolOutput(result.output)}` });
             }
           }
           return json({ error: "The agent used too many tool rounds" }, 502);
