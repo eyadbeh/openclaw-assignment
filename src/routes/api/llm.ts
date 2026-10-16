@@ -124,16 +124,19 @@ export const Route = createFileRoute("/api/llm")({
           const { createProposal } = await import("@/lib/agent/approval.server");
 
           const loopMessages: ChatMsg[] = [{ role: "system", content: system }, ...messages];
+          const FINAL_TOOLS = [TOOLS[0]!]; // last round offers only the json contract tool, forcing convergence
+          const trail: string[] = [];
           for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
             if (round === MAX_TOOL_ROUNDS - 1) {
               loopMessages.push({ role: "user", content: "Final tool round: stop exploring and give your best final answer right now via the json function." });
             }
+            const roundTools = round === MAX_TOOL_ROUNDS - 1 ? FINAL_TOOLS : TOOLS;
             let rateLimitDetail: string | null = null;
             for (let attempt = 0; attempt < 3; attempt++) {
               res = await fetch(`${base}/chat/completions`, {
                 method: "POST", signal: request.signal,
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-                body: JSON.stringify({ model, messages: loopMessages, tools: TOOLS, tool_choice: "auto" }),
+                body: JSON.stringify({ model, messages: loopMessages, tools: roundTools, tool_choice: "auto" }),
               });
               if (res.status !== 429) break;
               rateLimitDetail = await res.text();
@@ -144,17 +147,36 @@ export const Route = createFileRoute("/api/llm")({
               if (request.signal.aborted) return new Response(null, { status: 499 });
             }
             if (!res || !res.ok) {
-              const detail = (rateLimitDetail ?? (res ? await res.text() : "no response")).slice(0, 300);
+              const errText = rateLimitDetail ?? (res ? await res.text() : "no response");
+              // Salvage: models sometimes misuse a tool on the forced-final round and the
+              // provider rejects the whole generation — the attempted call arrives in
+              // failed_generation. If it is the json contract call, its arguments are the answer.
+              if (res?.status === 400) {
+                try {
+                  const parsed = JSON.parse(errText) as { error?: { failed_generation?: string } };
+                  const attempted = parsed.error?.failed_generation
+                    ? (JSON.parse(parsed.error.failed_generation) as { name?: string; arguments?: string | Record<string, unknown> })
+                    : undefined;
+                  if (attempted?.name === "json") {
+                    const salvage = typeof attempted.arguments === "string"
+                      ? (JSON.parse(attempted.arguments) as Record<string, unknown>)
+                      : attempted.arguments ?? {};
+                    return json({ text: JSON.stringify(salvage) });
+                  }
+                } catch { /* not salvageable — fall through to the honest error */ }
+              }
+              const detail = errText.slice(0, 300);
               console.error(`Provider ${kind} failed [${res?.status ?? "network"}]: ${detail}`);
-              return json({ error: `${kind} returned ${res?.status ?? 502}: ${detail}` }, res?.status ?? 502);
+              return json({ error: `${kind} returned ${res?.status ?? 502}: ${detail}`, trail }, res?.status ?? 502);
             }
             const data = (await res.json()) as { choices?: { message?: ChatMsg }[] };
             const msg: ChatMsg = data.choices?.[0]?.message ?? { role: "assistant", content: "" };
             const calls = msg.tool_calls ?? [];
+            trail.push(`round ${round + 1}: ${calls.length ? calls.map((c) => c.function?.name ?? "?").join(", ") : "final text"}`);
 
             if (!calls.length) {
               const text = typeof msg.content === "string" ? msg.content : "";
-              if (!text.trim()) return json({ error: "The provider returned an empty answer" }, 502);
+              if (!text.trim()) return json({ error: "The provider returned an empty answer", trail }, 502);
               return json({ text });
             }
 
@@ -169,10 +191,12 @@ export const Route = createFileRoute("/api/llm")({
                 // function creates server-side proposals with real stored arguments.
                 const fabricated = (args as { action_proposal?: { tool?: unknown } }).action_proposal;
                 if (fabricated && typeof fabricated.tool === "string" && isKnownTool(fabricated.tool)) {
-                  loopMessages.push(
-                    { role: "assistant", content: msg.content ?? null, tool_calls: calls },
-                    { role: "tool", tool_call_id: call.id ?? "", content: "Rejected: never fabricate an action_proposal yourself. Call the write_fix function with the real path, content and description — the server then creates the approval proposal. After that, give your final answer with action_proposal set to null." },
-                  );
+                  if (round === MAX_TOOL_ROUNDS - 1) {
+                    // Forced convergence: accept the answer but strip the un-registered proposal.
+                    const sanitized: Record<string, unknown> = { ...args, action_proposal: null };
+                    return json({ text: JSON.stringify(sanitized) });
+                  }
+                  loopMessages.push({ role: "tool", tool_call_id: call.id ?? "", content: "Rejected: never fabricate an action_proposal yourself. Call the write_fix function with the real path, content and description — the server then creates the approval proposal. After that, give your final answer with action_proposal set to null." });
                   continue;
                 }
                 return json({ text: JSON.stringify(args) });
@@ -201,7 +225,7 @@ export const Route = createFileRoute("/api/llm")({
               loopMessages.push({ role: "tool", tool_call_id: call.id ?? "", content: result.ok ? truncateToolOutput(result.output) : `Error: ${truncateToolOutput(result.output)}` });
             }
           }
-          return json({ error: "The agent used too many tool rounds" }, 502);
+          return json({ error: "The agent used too many tool rounds", trail }, 502);
         } catch (error) {
           if (request.signal.aborted) return new Response(null, { status: 499 });
           return json({ error: error instanceof Error ? error.message : "Provider request failed" }, 502);
