@@ -100,7 +100,7 @@ export function ProviderSettings() {
           <select className={`${field} mt-1`} value="" onChange={(e) => e.target.value && startNew(e.target.value as ProviderKind)}>
             <option value="">Choose a provider…</option>
             <optgroup label="OpenClaw &amp; Local">{(["openclaw", "ollama", "lmstudio", "custom"] as const).map((k) => <option key={k} value={k}>{KIND_INFO[k].label}</option>)}</optgroup>
-            <optgroup label="Cloud">{(["openai", "anthropic", "gemini", "openrouter"] as const).map((k) => <option key={k} value={k}>{KIND_INFO[k].label}</option>)}</optgroup>
+            <optgroup label="Cloud">{(["groq", "openai", "anthropic", "gemini", "openrouter"] as const).map((k) => <option key={k} value={k}>{KIND_INFO[k].label}</option>)}</optgroup>
           </select>
         </label>
       )}

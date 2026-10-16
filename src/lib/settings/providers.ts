@@ -1,4 +1,4 @@
-export type ProviderKind = "builtin" | "openclaw" | "ollama" | "lmstudio" | "custom" | "openai" | "anthropic" | "gemini" | "openrouter";
+export type ProviderKind = "builtin" | "openclaw" | "ollama" | "lmstudio" | "custom" | "groq" | "openai" | "anthropic" | "gemini" | "openrouter";
 export type KeySource = "none" | "browser" | "vault";
 
 export type Provider = {
@@ -21,6 +21,7 @@ export const KIND_INFO: Record<ProviderKind, { label: string; where: "built-in" 
   ollama: { label: "Ollama", where: "local", baseUrl: "http://localhost:11434/v1", model: "llama3.2" },
   lmstudio: { label: "LM Studio", where: "local", baseUrl: "http://localhost:1234/v1", model: "local-model" },
   custom: { label: "Other OpenAI-compatible", where: "local", baseUrl: "http://localhost:8000/v1", model: "model-name" },
+  groq: { label: "Groq (cloud, free tier)", where: "cloud", baseUrl: "https://api.groq.com/openai/v1", model: "openai/gpt-oss-120b" },
   openai: { label: "OpenAI", where: "cloud", baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini" },
   anthropic: { label: "Anthropic", where: "cloud", baseUrl: "https://api.anthropic.com/v1", model: "claude-sonnet-4-5" },
   gemini: { label: "Google Gemini", where: "cloud", baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", model: "gemini-2.5-flash" },
@@ -39,6 +40,7 @@ export function findProvider(settings: ProviderSettings, id: string | null): Pro
 
 /** The V3 portfolio as ready-made providers: cloud ones run on the built-in service, local ones on this computer's Ollama. */
 export const PORTFOLIO_PROVIDERS: Provider[] = [
+  { id: "groq-cloud", name: "Groq · gpt-oss-120b", kind: "groq", baseUrl: KIND_INFO.groq.baseUrl, model: "openai/gpt-oss-120b", keySource: "none" },
   ...["gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.6-sol", "gemini-3.1-pro"].map((model) => ({ id: `pf-${model}`, name: `Portfolio · ${model}`, kind: "builtin" as const, baseUrl: "", model, keySource: "none" as const })),
   ...["qwen3-coder:30b", "gpt-oss:120b"].map((model) => ({ id: `pf-${model}`, name: `Portfolio · ${model}`, kind: "ollama" as const, baseUrl: KIND_INFO.ollama.baseUrl, model, keySource: "none" as const })),
 ];

@@ -41,7 +41,7 @@ export const ENGINE_LABEL: Record<VoiceEngine, string> = {
 };
 
 const VOICE_KEY = "openclaw.voice";
-export const DEFAULT_VOICE: VoiceSettings = { agent: "general", engine: "browser", rate: 1, standbyPause: 900, browserVoice: "", kokoroUrl: "http://localhost:8880", kokoroVoice: "af_heart", asrEngine: "local", asrUrl: "http://localhost:8000/v1", asrModel: "whisper-1", customAgents: {} };
+export const DEFAULT_VOICE: VoiceSettings = { agent: "general", engine: "browser", rate: 1, standbyPause: 900, browserVoice: "", kokoroUrl: "http://localhost:8880", kokoroVoice: "af_heart", asrEngine: "cloud", asrUrl: "http://localhost:8000/v1", asrModel: "whisper-1", customAgents: {} };
 export const useVoiceSettings = () => useLocal(VOICE_KEY, DEFAULT_VOICE);
 
 function speakBrowser(text: string, v: VoiceSettings, signal?: AbortSignal) {

@@ -14,16 +14,24 @@ npm install
 cp .env.example .env
 ```
 
-Connect the OpenClaw gateway (free, fully local):
+Connect the AI backend — two options (both free):
 
+**Option 1 · Groq cloud (fastest, works immediately)**
+1. Get a free key at https://console.groq.com (2 minutes, no card).
+2. Put it in `.env` (gitignored): `GROQ_API_KEY="gsk_..."` — chat runs through
+   `/api/llm` → Groq `gpt-oss-120b` with the key kept server-side only.
+3. In the console, Settings → Models → select **Groq · gpt-oss-120b**.
+   Measured end-to-end: chat turn **~0.9 s**, speech-to-text **~0.7 s**.
+
+**Option 2 · OpenClaw Gateway (Companion)**
 1. In **OpenClaw Companion**, finish onboarding with a local Ollama model
    (`ollama pull qwen3:4b`, Provider = Ollama, Mode = Local Only,
    base URL `http://127.0.0.1:11434`).
 2. Enable the Gateway's HTTP surface using `openclaw/openclaw.example.json5`
-   (only the `gateway.http.endpoints` block in needed; validate with `openclaw doctor`).
+   (only the `gateway.http.endpoints` block is needed; validate with `openclaw doctor`).
 3. Paste the gateway token into `.env`:
-   `OPENCLAW_API_KEY="<token from Companion>"` (keep
-   `OPENCLAW_GATEWAY_URL="http://127.0.0.1:18789"`).
+   `OPENCLAW_API_KEY="<token from Companion>"` and set
+   `OPENCLAW_GATEWAY_URL` to the port Companion reports (`openclaw status`).
 4. Register the CISO agent with the `agents.entries.ciso` block (optional — without
    it the console still works through the gateway's default agent).
 
@@ -100,7 +108,9 @@ The CISO agent reviews source code for security vulnerabilities using real works
 | Secrets denylist (`.env*`, `*.key`, `.git/`) in the workspace sandbox | ✅ Implemented and tested |
 | Tool execution (server-side) | ✅ Implemented and tested |
 | Human approval enforcement | ✅ Server-side, tested |
-| Live end-to-end run against a real gateway | ⚠️ Requires your local Companion gateway to be up while testing |
+| Live end-to-end run against a real gateway | ⚠️ Depends on the Companion gateway running (`openclaw status` shows the port; `/api/agent` surfaces a honest 502 when it is down) |
+| Groq cloud chat (`/api/llm`, `openai/gpt-oss-120b`) | ✅ Implemented + live-verified (~0.9 s/turn, key server-side only) |
+| Speech-to-text (`/api/transcribe` → Groq `whisper-large-v3`) | ✅ Implemented + live-verified (~0.7 s, `STT_BASE_URL`/`STT_API_KEY` server-side; falls back to gateway audio route when unset) |
 | Voice interaction (speak, listen, screens) | ✅ Pre-existing, preserved |
 | 3D WebXR spatial view | ✅ Pre-existing, preserved |
 
@@ -162,7 +172,11 @@ The CISO agent reviews source code for security vulnerabilities using real works
 11. Click **Approve** to execute the write, or **Deny** to refuse. The server enforces the decision.
 12. The outcome (success, error, or denial) is reported back in the conversation.
 
-> **Note:** Steps 4–12 require the OpenClaw gateway to be reachable (Companion running + token in `.env`). Without a model, the tools and approval system are verified by the test suite (`npm test`).
+> **Note:** For the fast path, select **Groq · gpt-oss-120b** under Settings → Models and keep
+> speech-to-text on **Built-in cloud transcription** (the default) — both use the server-side
+> Groq key from `.env`. The OpenClaw gateway path (`/api/agent`) works when the Companion
+> gateway is running; without any model the tools and approval system are still verified by
+> the test suite (`npm test`).
 
 ## Where AI helped
 

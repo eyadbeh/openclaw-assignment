@@ -5,10 +5,17 @@ type Turn = { role: "user" | "assistant"; text: string };
 
 // Fixed hosts only: the browser never chooses where this server sends keys.
 const CLOUD: Record<string, string> = {
+  groq: "https://api.groq.com/openai/v1",
   openai: "https://api.openai.com/v1",
   gemini: "https://generativelanguage.googleapis.com/v1beta/openai",
   openrouter: "https://openrouter.ai/api/v1",
   anthropic: "https://api.anthropic.com/v1",
+};
+
+/** Server-side env keys per provider, so the browser needs no key at all for free-tier cloud models. */
+const ENV_KEYS: Record<string, string> = {
+  groq: "GROQ_API_KEY",
+  gemini: "GEMINI_API_KEY",
 };
 
 const json = (body: unknown, status = 200) =>
@@ -44,11 +51,11 @@ export const Route = createFileRoute("/api/llm")({
 
         let key: string;
         try {
-          key = body.vaultPath ? await keyFromVault(body.vaultPath, body.vaultField || "api_key") : (body.apiKey ?? "").trim();
+          key = body.vaultPath ? await keyFromVault(body.vaultPath, body.vaultField || "api_key") : (body.apiKey ?? "").trim() || process.env[ENV_KEYS[kind] ?? ""] || "";
         } catch (error) {
           return json({ error: error instanceof Error ? error.message : "Vault lookup failed" }, 502);
         }
-        if (!key) return json({ error: "No API key provided for this provider" }, 400);
+        if (!key) return json({ error: `No API key available for ${kind} (set ${ENV_KEYS[kind] ?? "an API key"} server-side or choose a key source in Settings)` }, 400);
 
         const plan = planContextMessage(body.context);
         const system = [SYSTEM_PROMPT, JSON_INSTRUCTION, plan].filter(Boolean).join("\n\n");
