@@ -22,6 +22,10 @@ Connect the AI backend — two options (both free):
    `/api/llm` → Groq `gpt-oss-120b` with the key kept server-side only.
 3. In the console, Settings → Models → select **Groq · gpt-oss-120b**.
    Measured end-to-end: chat turn **~0.9 s**, speech-to-text **~0.7 s**.
+   The Groq path runs a real native tool loop — `read_file`, `list_files`,
+   `search_code` execute server-side; `write_fix` still goes through the
+   server-enforced Approval panel. Free tier is rate-limited (≈8K tokens/min
+   per model); the route retries 429s automatically with the suggested delay.
 
 **Option 2 · OpenClaw Gateway (Companion)**
 1. In **OpenClaw Companion**, finish onboarding with a local Ollama model
@@ -109,7 +113,7 @@ The CISO agent reviews source code for security vulnerabilities using real works
 | Tool execution (server-side) | ✅ Implemented and tested |
 | Human approval enforcement | ✅ Server-side, tested |
 | Live end-to-end run against a real gateway | ⚠️ Depends on the Companion gateway running (`openclaw status` shows the port; `/api/agent` surfaces a honest 502 when it is down) |
-| Groq cloud chat (`/api/llm`, `openai/gpt-oss-120b`) | ✅ Implemented + live-verified (~0.9 s/turn, key server-side only) |
+| Groq cloud chat (`/api/llm`, `openai/gpt-oss-120b`) | ✅ Implemented + live-verified (~0.9 s/turn, native tool loop, key server-side only) |
 | Speech-to-text (`/api/transcribe` → Groq `whisper-large-v3`) | ✅ Implemented + live-verified (~0.7 s, `STT_BASE_URL`/`STT_API_KEY` server-side; falls back to gateway audio route when unset) |
 | Voice interaction (speak, listen, screens) | ✅ Pre-existing, preserved |
 | 3D WebXR spatial view | ✅ Pre-existing, preserved |
