@@ -1,0 +1,53 @@
+// Real OpenClaw configuration for this repository (OpenClaw reads JSON5).
+//
+// Merge the relevant blocks into ~/.openclaw/openclaw.json (or configure the
+// same values through the Companion wizard / Control UI at http://127.0.0.1:18789),
+// replacing <repo> with this repository's absolute path.
+//
+// Validation note: OpenClaw refuses to start on unknown config keys. After
+// editing, run `openclaw doctor` (or the Control UI's Config tab) to confirm
+// every key against the schema of YOUR installed OpenClaw version.
+
+{
+  // The voice console calls the gateway through the OpenAI-compatible
+  // /v1/chat/completions endpoint — disabled by default in OpenClaw.
+  gateway: {
+    http: {
+      endpoints: {
+        chatCompletions: { enabled: true },
+      },
+    },
+    // Auth is configured by the Companion wizard (gateway.auth.mode "token").
+    // Copy that token into living-ai-talk/.env as OPENCLAW_API_KEY.
+    // Keep the gateway bound to loopback — the token is full operator access.
+  },
+
+  agents: {
+    defaults: {
+      workspace: "~/.openclaw/workspace",
+    },
+    entries: {
+      ciso: {
+        name: "CISO · Code Security Reviewer",
+        // The tree the CISO reviews (this repository).
+        workspace: "<repo>",
+        skills: ["code-security-review"],
+        // Defense in depth for the hybrid setup: gateway-native tools stay
+        // read-only. The console executes its own server-side workspace tools,
+        // and every write still requires human approval in the Approval panel.
+        tools: {
+          allow: ["read"],
+          deny: ["exec", "edit", "write", "browser"],
+        },
+      },
+    },
+  },
+
+  skills: {
+    load: {
+      // Real OpenClaw skills are SKILL.md folders — this repository ships one
+      // ready to be scanned by the gateway.
+      extraDirs: ["<repo>/openclaw/skills"],
+    },
+  },
+}
