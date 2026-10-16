@@ -126,6 +126,29 @@ The CISO agent reviews source code for security vulnerabilities using real works
 > real error when the gateway is unreachable — see Settings → Models for
 > fallback providers (Ollama, LM Studio, cloud).
 
+## Performance notes — why the local gateway path is slow
+
+Measured on the development laptop (GTX 1650 Ti 4 GB VRAM, 20 GB RAM):
+
+| Path | Measured turn time | Where compute runs |
+|------|--------------------|--------------------|
+| Raw Ollama, tiny prompt | 1–8 s | Laptop (model ~85% in VRAM, 22 tok/s generation) |
+| OpenClaw gateway → local Ollama, real agent turn | 91–192 s | Same laptop hardware |
+| Groq cloud (current primary) | 0.7–2 s | Groq's servers |
+
+The local path is slow because of **hardware × prompt size** — not a bug:
+
+- The 4 GB GPU holds only ~85% of the `qwen3:4b` weights; long contexts spill the rest to the CPU.
+- Measured prefill speed is ~48 tok/s, and the OpenClaw agent prompt was 10,000+ tokens per turn (tool catalog, bootstrap files, reasoning summary) → minutes of prefill alone.
+- `thinking=medium` added hundreds of hidden reasoning tokens at 22 tok/s (we disabled it).
+- The model unloads after ~5 idle minutes, adding ~12 s per cold turn (mitigated with a 2 h keep-alive).
+
+The same GPU handled small prompts in seconds — which is why the Groq path is instant: inference happens in the cloud, not on this machine. Options to make the OpenClaw path fast again:
+
+1. Point the gateway's agent at a cloud model (the Google/Gemini plugin is chat-capable and the key is already configured in OpenClaw).
+2. Use a smaller local model (e.g. `qwen3:2b`) together with the applied diet (minimal tool profile, no bootstrap injection, thinking off).
+3. Keep the current hybrid: Groq direct for the live demo, OpenClaw fully wired as the gateway path.
+
 ## Key Scripts
 
 - `npm run dev` — Start the Vite + TanStack Start dev server

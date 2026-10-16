@@ -593,7 +593,7 @@ function VoiceConsole() {
                       disabled={busy || isRecording}
                       onSend={sendText}
                     />
-                    {message.screen?.actionProposal && (
+                    {message.id === messages[messages.length - 1]?.id && message.screen?.actionProposal && (
                       <InlineKeyboard
                         buttons={[
                           { key: "approve", label: "✓ Approve fix", onClick: () => void decideProposal(message.screen!.actionProposal!, true), disabled: busy || isRecording },

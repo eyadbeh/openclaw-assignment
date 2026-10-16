@@ -1,6 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { OUTPUT_FORMAT, SYSTEM_PROMPT, planContextMessage } from "@/lib/voice/prompt";
 import type { GatewayOptions } from "@/lib/ai/responses.server";
+import { dispatchTool, isKnownTool } from "@/lib/agent/tools.server";
+import { createProposal } from "@/lib/agent/approval.server";
+import { parseScreen } from "@/lib/voice/screen";
+import { resolveGatewayModel, toOpenClawTarget } from "@/lib/ai/models";
 
 type Turn = { role: "user" | "assistant"; text: string };
 
@@ -9,10 +13,7 @@ export const Route = createFileRoute("/api/agent")({
     handlers: {
       POST: async ({ request }: { request: Request }) => {
         const { streamResponses, collectResponses } = await import("@/lib/ai/responses.server");
-        const { dispatchTool, isKnownTool } = await import("@/lib/agent/tools.server");
-        const { createProposal } = await import("@/lib/agent/approval.server");
-        const { parseScreen } = await import("@/lib/voice/screen");
-
+        // Dynamic import removed for frequently used modules; using static imports instead.
         let turns: Turn[] = [];
         let context: string | undefined;
         let modelName: string | undefined;
@@ -35,7 +36,6 @@ export const Route = createFileRoute("/api/agent")({
           });
         }
 
-        const { resolveGatewayModel, toOpenClawTarget } = await import("@/lib/ai/models");
         const model = resolveGatewayModel(modelName);
         if (!model) {
           return new Response(JSON.stringify({ error: `${modelName} isn't offered by the built-in AI service` }), {
@@ -120,7 +120,7 @@ export const Route = createFileRoute("/api/agent")({
               // Rebuild the response with the server-generated proposal ID.
               const enriched = JSON.stringify({
                 kind: "screen",
-                screen: { text: screen.text, choices: screen.choices, navigation: screen.navigation },
+                screen: { text: `Proposal ready for your approval: ${toolResult.needsApproval.title}. ${toolResult.needsApproval.summary}`, choices: [], navigation: ["cancel"] },
                 action_proposal: {
                   id: proposal.id,
                   title: toolResult.needsApproval.title,
@@ -159,4 +159,3 @@ export const Route = createFileRoute("/api/agent")({
     },
   },
 });
-

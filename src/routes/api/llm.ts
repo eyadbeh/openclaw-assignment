@@ -210,7 +210,7 @@ export const Route = createFileRoute("/api/llm")({
                 const proposal = createProposal(name, result.needsApproval.args);
                 const enriched = JSON.stringify({
                   kind: "screen",
-                  screen: { text: "I've prepared this fix and need your approval before anything is written.", choices: [], navigation: ["cancel"] },
+                  screen: { text: `Proposal ready for your approval: ${result.needsApproval.title}. ${result.needsApproval.summary}`, choices: [], navigation: ["cancel"] },
                   action_proposal: {
                     id: proposal.id,
                     title: result.needsApproval.title,
